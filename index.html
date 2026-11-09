@@ -1,0 +1,477 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>Sudoku</title>
+<style>
+  *{box-sizing:border-box}
+  html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#f7f9fc;font-family:Arial,sans-serif;color:#17233c;user-select:none;-webkit-tap-highlight-color:transparent}
+
+  .app{height:100%;min-height:560px;padding:16px}
+
+  .stage{
+    position:relative;width:100%;height:100%;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;
+    background:#ffffff;border-radius:16px;border:1px solid #eef1f6;
+    box-shadow:0 8px 26px rgba(30,50,90,.08);
+    padding:14px;overflow:hidden;
+  }
+
+  .badge{position:absolute;top:12px;left:12px;z-index:20;display:flex;align-items:center;justify-content:center;
+    width:44px;height:44px;border-radius:50%;
+    opacity:0;transform:scale(.5);transition:opacity .25s ease,transform .25s ease,background .2s ease,border-color .2s ease}
+  .badge.show{opacity:1;transform:scale(1)}
+  .badge.ok{background:#e4f8ee;border:3px solid #8fdcb2}
+  .badge.bad{background:#fdeef0;border:3px solid #f2aeb5}
+  .badge svg{width:24px;height:24px;fill:none;stroke-width:2.8}
+  .badge.ok svg{stroke:#1c8a52}
+  .badge.bad svg{stroke:#c8404b}
+
+  .toolbar{display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:center;
+    background:#f4f8fc;border:1px solid #d7e6f5;border-radius:12px;padding:6px;
+    box-shadow:0 4px 14px rgba(30,60,110,.12)}
+  .toolbar .sep{width:1px;height:26px;background:#d7e6f5;margin:0 4px}
+  .tbtn{width:40px;height:40px;display:flex;align-items:center;justify-content:center;
+    border:0;border-radius:8px;background:transparent;color:#33415c;cursor:pointer;
+    transition:background .15s ease,color .15s ease,transform .1s ease}
+  .tbtn svg{width:20px;height:20px;stroke:currentColor;fill:none}
+  .tbtn:hover{background:#e4edf9;color:#1c2c47}
+  .tbtn:active{transform:scale(.92)}
+  .tbtn.active{background:#2c7fce;color:#fff}
+  .lvl svg{width:22px;height:22px;fill:currentColor;stroke:none}
+
+  .board{
+    display:grid;grid-template-columns:repeat(9,1fr);grid-template-rows:repeat(9,1fr);
+    border:3px solid #17233c;border-radius:6px;background:#17233c;overflow:hidden;
+    box-shadow:0 6px 18px rgba(30,50,90,.12);
+  }
+  .cell{
+    position:relative;display:flex;align-items:center;justify-content:center;
+    background:#ffffff;border-right:1px solid #c3cad4;border-bottom:1px solid #c3cad4;
+    font-weight:700;color:#2c7fce;cursor:pointer;
+    transition:background .12s ease;
+  }
+  .cell.cR{border-right:3px solid #17233c}
+  .cell.cB{border-bottom:3px solid #17233c}
+  .cell.last-c{border-right:0}
+  .cell.last-r{border-bottom:0}
+  .cell.given{color:#17233c;font-weight:800}
+  .cell.peer{background:#f1f6fc}
+  .cell.same{background:#d9e9fb}
+  .cell.sel{background:#bcd8f7}
+  .cell.conflict{color:#d93b4a}
+  .cell.wrong{background:#fbd5da;animation:shake .35s ease}
+  @keyframes shake{20%{transform:translateX(-3px)}50%{transform:translateX(3px)}80%{transform:translateX(-1px)}100%{transform:translateX(0)}}
+
+  .notes{position:absolute;inset:2px;display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);
+    font-weight:700;color:#7a8299;pointer-events:none}
+  .notes span{display:flex;align-items:center;justify-content:center;line-height:1}
+
+  .pad{display:grid;grid-template-columns:repeat(9,1fr);gap:6px}
+  .pad button{
+    height:52px;border-radius:12px;border:2px solid #d7e6f5;background:#f4f8fc;
+    font-weight:800;font-size:22px;color:#2c7fce;cursor:pointer;font-family:inherit;
+    transition:background .15s ease,transform .1s ease,opacity .15s ease;
+  }
+  .pad button:hover{background:#e4edf9}
+  .pad button:active{transform:scale(.92)}
+  .pad button.done{opacity:.28}
+</style>
+</head>
+<body>
+<main class="app">
+  <section class="stage" id="stage">
+    <div class="badge" id="badge">
+      <svg viewBox="0 0 24 24" id="badgeIcon" stroke-linecap="round" stroke-linejoin="round"></svg>
+    </div>
+
+    <div class="toolbar" id="toolbar">
+      <button class="tbtn lvl" data-lvl="0" aria-label="Easy" title="Easy">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"></circle></svg>
+      </button>
+      <button class="tbtn lvl" data-lvl="1" aria-label="Medium" title="Medium">
+        <svg viewBox="0 0 24 24"><circle cx="8" cy="12" r="3.2"></circle><circle cx="16" cy="12" r="3.2"></circle></svg>
+      </button>
+      <button class="tbtn lvl" data-lvl="2" aria-label="Hard" title="Hard">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="7" r="3"></circle><circle cx="7" cy="16" r="3"></circle><circle cx="17" cy="16" r="3"></circle></svg>
+      </button>
+      <span class="sep"></span>
+      <button class="tbtn" id="newBtn" aria-label="New puzzle" title="New puzzle">
+        <svg viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3.5" y="3.5" width="17" height="17" rx="3.5"></rect>
+          <circle cx="8.5" cy="8.5" r="1" fill="currentColor"></circle>
+          <circle cx="15.5" cy="8.5" r="1" fill="currentColor"></circle>
+          <circle cx="12" cy="12" r="1" fill="currentColor"></circle>
+          <circle cx="8.5" cy="15.5" r="1" fill="currentColor"></circle>
+          <circle cx="15.5" cy="15.5" r="1" fill="currentColor"></circle>
+        </svg>
+      </button>
+      <button class="tbtn" id="resetBtn" aria-label="Reset" title="Reset">
+        <svg viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 12a9 9 0 1 1 3 6.7"></path><path d="M3 21v-5h5"></path>
+        </svg>
+      </button>
+      <button class="tbtn" id="undoBtn" aria-label="Undo" title="Undo">
+        <svg viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M9 14L4 9l5-5"></path><path d="M4 9h10a6 6 0 0 1 0 12h-3"></path>
+        </svg>
+      </button>
+      <span class="sep"></span>
+      <button class="tbtn" id="pencilBtn" aria-label="Notes" title="Notes">
+        <svg viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 20l1-4L16.5 4.5a2.1 2.1 0 0 1 3 3L8 19z"></path><path d="M14.5 6.5l3 3"></path>
+        </svg>
+      </button>
+      <button class="tbtn" id="eraseBtn" aria-label="Erase" title="Erase">
+        <svg viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M20 20H9L4 15a2 2 0 0 1 0-2.8L12.2 4a2 2 0 0 1 2.8 0l5 5a2 2 0 0 1 0 2.8L12 20"></path><path d="M8 11l6 6"></path>
+        </svg>
+      </button>
+      <button class="tbtn" id="checkBtn" aria-label="Check" title="Check">
+        <svg viewBox="0 0 24 24" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12l5 5L20 6"></path></svg>
+      </button>
+    </div>
+
+    <div class="board" id="board"></div>
+    <div class="pad" id="pad"></div>
+  </section>
+</main>
+
+<script>
+const LEVEL_GIVENS = [46, 38, 31];
+let level = 1;
+
+const $ = id => document.getElementById(id);
+const stage = $("stage"), boardEl = $("board"), padEl = $("pad"), badge = $("badge"), badgeIcon = $("badgeIcon");
+const pencilBtn = $("pencilBtn");
+
+// ---------- solver / generator ----------
+const BIT = d => 1 << (d - 1);
+function popcount(x){ let c = 0; while(x){ x &= x - 1; c++; } return c; }
+const ROW = i => Math.floor(i / 9), COL = i => i % 9, BOX = i => Math.floor(ROW(i) / 3) * 3 + Math.floor(COL(i) / 3);
+
+const PEERS = [];
+for(let i = 0; i < 81; i++){
+  const s = new Set();
+  for(let j = 0; j < 81; j++){
+    if(j !== i && (ROW(j) === ROW(i) || COL(j) === COL(i) || BOX(j) === BOX(i))) s.add(j);
+  }
+  PEERS.push([...s]);
+}
+
+function makeMasks(grid){
+  const rows = new Array(9).fill(0), cols = new Array(9).fill(0), boxes = new Array(9).fill(0);
+  for(let i = 0; i < 81; i++){
+    if(grid[i]){ const b = BIT(grid[i]); rows[ROW(i)] |= b; cols[COL(i)] |= b; boxes[BOX(i)] |= b; }
+  }
+  return { rows, cols, boxes };
+}
+
+function shuffle(a){
+  for(let i = a.length - 1; i > 0; i--){
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function solveRandom(grid){
+  const m = makeMasks(grid);
+  function rec(){
+    let best = -1, bestAvail = 0, bestCount = 10;
+    for(let i = 0; i < 81; i++){
+      if(grid[i]) continue;
+      const avail = 511 & ~(m.rows[ROW(i)] | m.cols[COL(i)] | m.boxes[BOX(i)]);
+      const c = popcount(avail);
+      if(c < bestCount){ best = i; bestAvail = avail; bestCount = c; if(c <= 1) break; }
+    }
+    if(best === -1) return true;
+    if(bestCount === 0) return false;
+    const digits = [];
+    for(let d = 1; d <= 9; d++) if(bestAvail & BIT(d)) digits.push(d);
+    shuffle(digits);
+    for(const d of digits){
+      const b = BIT(d);
+      grid[best] = d; m.rows[ROW(best)] |= b; m.cols[COL(best)] |= b; m.boxes[BOX(best)] |= b;
+      if(rec()) return true;
+      grid[best] = 0; m.rows[ROW(best)] &= ~b; m.cols[COL(best)] &= ~b; m.boxes[BOX(best)] &= ~b;
+    }
+    return false;
+  }
+  return rec();
+}
+
+function countSolutions(grid, limit){
+  const m = makeMasks(grid);
+  let count = 0;
+  function rec(){
+    let best = -1, bestAvail = 0, bestCount = 10;
+    for(let i = 0; i < 81; i++){
+      if(grid[i]) continue;
+      const avail = 511 & ~(m.rows[ROW(i)] | m.cols[COL(i)] | m.boxes[BOX(i)]);
+      const c = popcount(avail);
+      if(c < bestCount){ best = i; bestAvail = avail; bestCount = c; if(c <= 1) break; }
+    }
+    if(best === -1){ count++; return count >= limit; }
+    if(bestCount === 0) return false;
+    for(let d = 1; d <= 9; d++){
+      if(!(bestAvail & BIT(d))) continue;
+      const b = BIT(d);
+      grid[best] = d; m.rows[ROW(best)] |= b; m.cols[COL(best)] |= b; m.boxes[BOX(best)] |= b;
+      const stop = rec();
+      grid[best] = 0; m.rows[ROW(best)] &= ~b; m.cols[COL(best)] &= ~b; m.boxes[BOX(best)] &= ~b;
+      if(stop) return true;
+    }
+    return false;
+  }
+  rec();
+  return count;
+}
+
+function generate(givensTarget){
+  const sol = new Array(81).fill(0);
+  solveRandom(sol);
+  const puzzle = sol.slice();
+  const order = shuffle([...Array(81).keys()]);
+  const removeTarget = 81 - givensTarget;
+  let removed = 0;
+  const t0 = performance.now();
+  for(const idx of order){
+    if(removed >= removeTarget || performance.now() - t0 > 1800) break;
+    const keep = puzzle[idx];
+    puzzle[idx] = 0;
+    if(countSolutions(puzzle.slice(), 2) === 1) removed++;
+    else puzzle[idx] = keep;
+  }
+  return { solution: sol, puzzle };
+}
+
+// ---------- game state ----------
+let solution = [], values = [], notes = [], given = [], history = [];
+let selected = -1, pencil = false, solved = false, flashTimer = null;
+
+function newGame(){
+  const g = generate(LEVEL_GIVENS[level]);
+  solution = g.solution;
+  values = g.puzzle.slice();
+  given = g.puzzle.map(v => v !== 0);
+  notes = new Array(81).fill(0);
+  history = [];
+  selected = -1;
+  solved = false;
+  hideBadge(true);
+  render();
+}
+
+function resetGame(){
+  for(let i = 0; i < 81; i++){ if(!given[i]){ values[i] = 0; } notes[i] = 0; }
+  history = [];
+  solved = false;
+  hideBadge(true);
+  render();
+}
+
+// ---------- board build ----------
+const cells = [];
+function buildBoard(){
+  boardEl.replaceChildren();
+  for(let i = 0; i < 81; i++){
+    const c = document.createElement("div");
+    c.className = "cell";
+    const r = ROW(i), col = COL(i);
+    if(col === 2 || col === 5) c.classList.add("cR");
+    if(r === 2 || r === 5) c.classList.add("cB");
+    if(col === 8) c.classList.add("last-c");
+    if(r === 8) c.classList.add("last-r");
+    c.addEventListener("click", () => { selected = i; render(); });
+    boardEl.append(c);
+    cells.push(c);
+  }
+}
+
+function buildPad(){
+  padEl.replaceChildren();
+  for(let d = 1; d <= 9; d++){
+    const b = document.createElement("button");
+    b.textContent = d;
+    b.dataset.d = d;
+    b.setAttribute("aria-label", "Digit " + d);
+    b.addEventListener("click", () => enter(d));
+    padEl.append(b);
+  }
+}
+
+// ---------- rendering ----------
+function conflictSet(){
+  const bad = new Set();
+  for(let i = 0; i < 81; i++){
+    if(!values[i]) continue;
+    for(const j of PEERS[i]){
+      if(values[j] === values[i]){ bad.add(i); bad.add(j); }
+    }
+  }
+  return bad;
+}
+
+function render(){
+  const bad = conflictSet();
+  const selVal = selected >= 0 ? values[selected] : 0;
+  const peers = selected >= 0 ? new Set(PEERS[selected]) : new Set();
+  const counts = new Array(10).fill(0);
+
+  for(let i = 0; i < 81; i++){
+    const c = cells[i];
+    c.classList.remove("peer", "same", "sel", "conflict", "given");
+    if(given[i]) c.classList.add("given");
+    if(i === selected) c.classList.add("sel");
+    else if(selVal && values[i] === selVal) c.classList.add("same");
+    else if(peers.has(i)) c.classList.add("peer");
+    if(bad.has(i)) c.classList.add("conflict");
+
+    c.replaceChildren();
+    if(values[i]){
+      c.append(document.createTextNode(values[i]));
+      counts[values[i]]++;
+    } else if(notes[i]){
+      const n = document.createElement("div");
+      n.className = "notes";
+      for(let d = 1; d <= 9; d++){
+        const s = document.createElement("span");
+        s.textContent = (notes[i] & BIT(d)) ? d : "";
+        n.append(s);
+      }
+      c.append(n);
+    }
+  }
+
+  padEl.querySelectorAll("button").forEach(b => b.classList.toggle("done", counts[Number(b.dataset.d)] >= 9));
+  pencilBtn.classList.toggle("active", pencil);
+  document.querySelectorAll(".lvl").forEach(b => b.classList.toggle("active", Number(b.dataset.lvl) === level));
+
+  if(!solved && values.every((v, i) => v === solution[i])){
+    solved = true;
+    showBadge("ok", true);
+  }
+  fitSizes();
+}
+
+// ---------- input ----------
+function pushHistory(i){ history.push({ i, v: values[i], n: notes[i] }); if(history.length > 400) history.shift(); }
+
+function enter(d){
+  if(selected < 0 || given[selected] || solved) return;
+  const i = selected;
+  if(pencil){
+    if(values[i]) return;
+    pushHistory(i);
+    notes[i] ^= BIT(d);
+  } else {
+    pushHistory(i);
+    if(values[i] === d){ values[i] = 0; }
+    else {
+      values[i] = d; notes[i] = 0;
+      for(const j of PEERS[i]) if(!values[j]) notes[j] &= ~BIT(d);
+    }
+  }
+  render();
+}
+
+function erase(){
+  if(selected < 0 || given[selected] || solved) return;
+  if(!values[selected] && !notes[selected]) return;
+  pushHistory(selected);
+  values[selected] = 0; notes[selected] = 0;
+  render();
+}
+
+function undo(){
+  if(solved) return;
+  const h = history.pop();
+  if(!h) return;
+  values[h.i] = h.v; notes[h.i] = h.n;
+  selected = h.i;
+  render();
+}
+
+function check(){
+  if(solved) return;
+  const wrong = [];
+  for(let i = 0; i < 81; i++) if(values[i] && values[i] !== solution[i]) wrong.push(i);
+  if(wrong.length){
+    wrong.forEach(i => { cells[i].classList.remove("wrong"); void cells[i].offsetWidth; cells[i].classList.add("wrong"); });
+    showBadge("bad", false);
+    clearTimeout(flashTimer);
+    flashTimer = setTimeout(() => { wrong.forEach(i => cells[i].classList.remove("wrong")); hideBadge(false); }, 1500);
+  } else {
+    showBadge("ok", false);
+    clearTimeout(flashTimer);
+    flashTimer = setTimeout(() => hideBadge(false), 1100);
+  }
+}
+
+function showBadge(kind, persistent){
+  badge.classList.add("show");
+  badge.classList.toggle("ok", kind === "ok");
+  badge.classList.toggle("bad", kind === "bad");
+  badgeIcon.innerHTML = kind === "ok"
+    ? '<path d="M4 12l5 5L20 6"></path>'
+    : '<line x1="6" y1="6" x2="18" y2="18"></line><line x1="18" y1="6" x2="6" y2="18"></line>';
+  if(persistent) clearTimeout(flashTimer);
+}
+function hideBadge(force){
+  if(solved && !force) return;
+  badge.classList.remove("show", "ok", "bad");
+}
+
+// ---------- wiring ----------
+$("newBtn").addEventListener("click", newGame);
+$("resetBtn").addEventListener("click", resetGame);
+$("undoBtn").addEventListener("click", undo);
+$("eraseBtn").addEventListener("click", erase);
+$("checkBtn").addEventListener("click", check);
+pencilBtn.addEventListener("click", () => { pencil = !pencil; render(); });
+document.querySelectorAll(".lvl").forEach(b => b.addEventListener("click", () => { level = Number(b.dataset.lvl); newGame(); }));
+
+document.addEventListener("keydown", e => {
+  if(e.key >= "1" && e.key <= "9"){ enter(Number(e.key)); return; }
+  if(e.key === "Backspace" || e.key === "Delete" || e.key === "0"){ erase(); return; }
+  if(e.key === "n" || e.key === "N"){ pencil = !pencil; render(); return; }
+  const moves = { ArrowUp: -9, ArrowDown: 9, ArrowLeft: -1, ArrowRight: 1 };
+  if(moves[e.key] !== undefined){
+    e.preventDefault();
+    if(selected < 0){ selected = 40; }
+    else {
+      const r = ROW(selected), c = COL(selected);
+      if(e.key === "ArrowUp" && r > 0) selected -= 9;
+      if(e.key === "ArrowDown" && r < 8) selected += 9;
+      if(e.key === "ArrowLeft" && c > 0) selected -= 1;
+      if(e.key === "ArrowRight" && c < 8) selected += 1;
+    }
+    render();
+  }
+});
+
+// ---------- sizing ----------
+function fitSizes(){
+  const sw = stage.clientWidth - 28, sh = stage.clientHeight - 28;
+  const toolbarH = $("toolbar").offsetHeight || 54;
+  const padH = 52 + 4;
+  const size = Math.max(180, Math.min(sw, sh - toolbarH - padH - 28, 580));
+  boardEl.style.width = size + "px";
+  boardEl.style.height = size + "px";
+  padEl.style.width = size + "px";
+  const fs = Math.floor(size / 9 * 0.56);
+  boardEl.style.fontSize = fs + "px";
+  const nf = Math.max(8, Math.floor(size / 9 * 0.26));
+  boardEl.querySelectorAll(".notes").forEach(n => n.style.fontSize = nf + "px");
+  padEl.querySelectorAll("button").forEach(b => { b.style.height = Math.min(52, Math.max(38, size / 9)) + "px"; b.style.fontSize = Math.max(16, Math.floor(size / 9 * 0.42)) + "px"; });
+}
+window.addEventListener("resize", fitSizes);
+
+buildBoard();
+buildPad();
+newGame();
+</script>
+</body>
+</html>
